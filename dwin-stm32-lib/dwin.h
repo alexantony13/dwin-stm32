@@ -71,36 +71,91 @@ typedef struct dwin_t {
 	dwin_cb_fn_t cb_fn[DWIN_CALLBACK_ADDR_MAX_COUNT];
 } dwin_t;
 
-uint8_t dwin_init(dwin_t *dwin);
+/**
+ * @brief 		DWIN lib init function
+ * 				Should be called once on application start.
+ *
+ * @param dwin	dwin_t hanle
+ * @return
+ */
+uint8_t dwin_init(dwin_t *dwin, void *huart, int16_t ring_buffer_size);
+
+/**
+ * @brief			DWIN lib process function.
+ * 					Should be called from the main loop.
+ *
+ * @param dwin		dwin_t hanle
+ * @param c_tick	current tick value
+ * @return
+ */
 uint8_t dwin_process(dwin_t *dwin, uint32_t c_tick);
+
+/**
+ * @brief 					Function to write data to DWIN display VP address
+ *
+ * @param dwin				dwin_t hanle
+ * @param vp_start_addr		VP start address from which data is to be updated
+ * @param data				pointer to data
+ * @param data_len			data length
+ * @param ctick				current tick value for checking timeout
+ * @return
+ */
 uint8_t dwin_write_vp(dwin_t *dwin, uint16_t vp_start_addr, uint16_t *data,
 		uint16_t data_len, uint32_t ctick);
+
+/**
+ * @brief 					Function to register user callbacks on VP data update from display.
+ *
+ * @param dwin				dwin_t hanle
+ * @param watch_address		VP address to check for update, upon which the callback function is called.
+ * @param cb_fn				Function pointer to the user callback function
+ * @return
+ */
 uint8_t dwin_reg_cb(dwin_t *dwin, uint16_t watch_address, dwin_cb_fn_t cb_fn);
+
+/**
+ * @brief 			Function to check if UART is ready for new transmit.
+ *
+ * @param dwin		dwin_t hanle
+ * @return
+ */
 uint8_t dwin_is_tx_idle(dwin_t *dwin);
 
-/*
- * Call from HAL_UARTEx_RxEventCallback in main.c
- * void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
- * {}
+/**
+ * @brief	DWIN UART callback to be called after receiving data
+ *			Can be called from:
+ *				void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size){}
+ *
+ * @param dwin						dwin_t hanle
+ * @param last_byte_pos_in_buffer	position of the last byte received in the uart rx buffer
+ * @attention 						"HAL_UARTEx_RxEventCallback" gives the size.
+ * 									"last_byte_pos_in_buffer" should be (size-1)
  */
-inline void dwin_uart_rx_callback(dwin_t *dwin, uint16_t head) {
-	dwin->rx_ring_buffer.head_index = head;
+inline void dwin_uart_rx_callback(dwin_t *dwin,
+		uint16_t last_byte_pos_in_buffer) {
+	dwin->rx_ring_buffer.head_index = last_byte_pos_in_buffer;
 }
 
-/* Call from HAL_UART_TxCpltCallback handler in main.c
- void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
- {}
+/**
+ * @brief		DWIN UART callback to be called after data is transmitted.
+ * 				Can be called from:
+ * 					void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){}
+ *
+ * @param dwin	dwin_t hanle
  */
 inline void dwin_uart_tx_callback(dwin_t *dwin) {
-	dwin->_tx_status = DWIN_TX_STATUS_TX_CMPLT;
+	dwin->tx_status = DWIN_TX_STATUS_TX_CMPLT;
 }
 
-/* Call from HAL_UART_ErrorCallback in main.c
- * void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
- * {}
+/**
+ * @brief 		DWIN UART error callback
+ * 				Can be called from:
+ * 					void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart){}
+ *
+ * @param dwin	dwin_t hanle
  */
 inline void dwin_uart_error_callback(dwin_t *dwin) {
-	dwin->_status = DWIN_STATUS_UART_ERROR;
+	dwin->status = DWIN_STATUS_UART_ERROR;
 }
 
 #ifdef __cplusplus
