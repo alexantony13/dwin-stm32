@@ -53,21 +53,22 @@ typedef struct dwin_ring_buffer_t {
 typedef void (*dwin_cb_fn_t)(uint16_t);
 
 typedef struct dwin_t {
-	dwin_status_t status;
 	void *huart;
-
-	dwin_rx_status_t rx_status;
 	dwin_ring_buffer_t rx_ring_buffer;
-	uint8_t rx_frame_buffer[DWIN_RX_FRAME_MAX_LEN];
-	uint16_t rx_data_byte_count, rx_data_byte_len;
-	uint32_t rx_frame_start_tick, rx_frame_timeout_ticks;
 
-	dwin_tx_status_t tx_status;
-	uint8_t tx_frame_buffer[DWIN_TX_FRAME_MAX_LEN];
-	uint32_t tx_last_sent_tick, tx_timeout_ticks;
+	dwin_status_t _status;
 
-	int16_t cb_address[DWIN_CALLBACK_ADDR_MAX_COUNT];
-	dwin_cb_fn_t cb_fn[DWIN_CALLBACK_ADDR_MAX_COUNT];
+	dwin_rx_status_t _rx_status;
+	uint8_t _rx_frame_buffer[DWIN_RX_FRAME_MAX_LEN];
+	uint16_t _rx_data_byte_count, _rx_data_byte_len;
+	uint32_t _rx_frame_start_tick, _rx_frame_timeout_ticks;
+
+	dwin_tx_status_t _tx_status;
+	uint8_t _tx_frame_buffer[DWIN_TX_FRAME_MAX_LEN];
+	uint32_t _tx_last_sent_tick, _tx_timeout_ticks;
+
+	int16_t _cb_address[DWIN_CALLBACK_ADDR_MAX_COUNT];
+	dwin_cb_fn_t _cb_fn[DWIN_CALLBACK_ADDR_MAX_COUNT];
 } dwin_t;
 
 uint8_t dwin_init(dwin_t *dwin);
@@ -91,7 +92,7 @@ inline void dwin_uart_rx_callback(dwin_t *dwin, uint16_t head) {
  {}
  */
 inline void dwin_uart_tx_callback(dwin_t *dwin) {
-	dwin->tx_status = DWIN_TX_STATUS_TX_CMPLT;
+	dwin->_tx_status = DWIN_TX_STATUS_TX_CMPLT;
 }
 
 /* Call from HAL_UART_ErrorCallback in main.c
@@ -99,7 +100,7 @@ inline void dwin_uart_tx_callback(dwin_t *dwin) {
  * {}
  */
 inline void dwin_uart_error_callback(dwin_t *dwin) {
-	dwin->status = DWIN_STATUS_UART_ERROR;
+	dwin->_status = DWIN_STATUS_UART_ERROR;
 }
 
 #ifdef __cplusplus
