@@ -31,7 +31,7 @@
 	</natures>
 	<linkedResources>
 		<link>
-			<name>Core/dwin-stm32-lib</name>
+			<name>App/dwin-stm32-lib</name>
 			<type>2</type>
 			<location>D:/Dev/dwin-stm32/dwin-stm32-lib</location>
 		</link>
