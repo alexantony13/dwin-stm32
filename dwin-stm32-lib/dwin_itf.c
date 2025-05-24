@@ -21,6 +21,6 @@ dwin_error_t dwin_itf_uart_receive_to_idle_dma(dwin_t *dwin) {
 
 dwin_error_t dwin_itf_uart_transmit_dma(dwin_t *dwin, uint16_t tx_len) {
 	dwin_error_t error = HAL_UART_Transmit_DMA(dwin->huart,
-			dwin->_tx_frame_buffer, tx_len);
+			dwin->tx_frame_buffer, tx_len);
 	return error;
 }

@@ -33,22 +33,25 @@ enum dwin_frame_names {
 
 static uint8_t dwin_ring_buffer_dequeue(dwin_t *dwin, uint8_t *data);
 
-uint8_t dwin_init(dwin_t *dwin) {
+uint8_t dwin_init(dwin_t *dwin, void *huart, int16_t ring_buffer_size) {
 	uint8_t ret_status = 0;
 
-	dwin->_status = DWIN_STATUS_OK;
+	dwin->huart = huart;
+	dwin->rx_ring_buffer.size = ring_buffer_size;
 
-	dwin->_tx_status = DWIN_TX_STATUS_IDLE;
-	dwin->_tx_timeout_ticks = 1000;
+	dwin->status = DWIN_STATUS_OK;
 
-	dwin->_rx_status = DWIN_RX_STATUS_WAITING_HEADER;
+	dwin->tx_status = DWIN_TX_STATUS_IDLE;
+	dwin->tx_timeout_ticks = 1000;
+
+	dwin->rx_status = DWIN_RX_STATUS_WAITING_HEADER;
 	dwin->rx_ring_buffer.head_index = -1;
 	dwin->rx_ring_buffer.tail_index = -1;
-	dwin->_rx_frame_timeout_ticks = 1000;
+	dwin->rx_frame_timeout_ticks = 1000;
 
 	for (uint8_t i = 0; i < DWIN_CALLBACK_ADDR_MAX_COUNT; ++i) {
-		dwin->_cb_address[i] = -1;
-		dwin->_cb_fn[i] = NULL;
+		dwin->cb_address[i] = -1;
+		dwin->cb_fn[i] = NULL;
 	}
 
 	if (dwin->rx_ring_buffer.size != 0) {
@@ -100,50 +103,50 @@ uint8_t dwin_process(dwin_t *dwin, uint32_t c_tick) {
 	uint8_t ret_status = 0;
 	uint8_t rx_data;
 
-	if (dwin->_status == DWIN_STATUS_UART_ERROR) {
-		dwin->_rx_status = DWIN_RX_STATUS_WAITING_HEADER;
-		dwin->_tx_status = DWIN_TX_STATUS_IDLE;
+	if (dwin->status == DWIN_STATUS_UART_ERROR) {
+		dwin->rx_status = DWIN_RX_STATUS_WAITING_HEADER;
+		dwin->tx_status = DWIN_TX_STATUS_IDLE;
 		dwin_itf_uart_abort(dwin);
 		dwin->rx_ring_buffer.head_index = -1;
 		dwin->rx_ring_buffer.tail_index = -1;
 		if (dwin_itf_uart_receive_to_idle_dma(dwin) == DWIN_ERROR_NOERR) {
-			dwin->_status = DWIN_STATUS_OK;
+			dwin->status = DWIN_STATUS_OK;
 		}
 	}
 
-	if (dwin->_rx_status < DWIN_RX_STATUS_DATA_RECEIVED) {
+	if (dwin->rx_status < DWIN_RX_STATUS_DATA_RECEIVED) {
 		if (dwin_ring_buffer_dequeue(dwin, &rx_data) == 0) {
 			// HAL_UART_Transmit(dwin->ring_buffer.huart, &rx_data, 1, 100);
-			switch (dwin->_rx_status) {
+			switch (dwin->rx_status) {
 			case DWIN_RX_STATUS_WAITING_HEADER:
 				if (rx_data == 0x5a) {
-					dwin->_rx_frame_buffer[DWIN_FRAME_HEADER_HIGH] = rx_data;
+					dwin->rx_frame_buffer[DWIN_FRAME_HEADER_HIGH] = rx_data;
 				} else if (rx_data == 0xa5) {
-					dwin->_rx_frame_buffer[DWIN_FRAME_HEADER_LOW] = rx_data;
-					if (dwin->_rx_frame_buffer[DWIN_FRAME_HEADER_HIGH] == 0x5a) {
-						dwin->_rx_status = DWIN_RX_STATUS_WAITING_FRAME_LEN;
-						dwin->_rx_frame_start_tick = c_tick;
+					dwin->rx_frame_buffer[DWIN_FRAME_HEADER_LOW] = rx_data;
+					if (dwin->rx_frame_buffer[DWIN_FRAME_HEADER_HIGH] == 0x5a) {
+						dwin->rx_status = DWIN_RX_STATUS_WAITING_FRAME_LEN;
+						dwin->rx_frame_start_tick = c_tick;
 					}
 				}
 				break;
 			case DWIN_RX_STATUS_WAITING_FRAME_LEN:
-				dwin->_rx_frame_buffer[DWIN_FRAME_LEN] = rx_data;
-				dwin->_rx_status = DWIN_RX_STATUS_WAITING_FN_CODE;
+				dwin->rx_frame_buffer[DWIN_FRAME_LEN] = rx_data;
+				dwin->rx_status = DWIN_RX_STATUS_WAITING_FN_CODE;
 				break;
 			case DWIN_RX_STATUS_WAITING_FN_CODE:
-				dwin->_rx_frame_buffer[DWIN_FRAME_FUNC_CODE] = rx_data;
-				dwin->_rx_data_byte_len = dwin->_rx_frame_buffer[DWIN_FRAME_LEN]
+				dwin->rx_frame_buffer[DWIN_FRAME_FUNC_CODE] = rx_data;
+				dwin->rx_data_byte_len = dwin->rx_frame_buffer[DWIN_FRAME_LEN]
 						- 1;
-				dwin->_rx_data_byte_count = 0;
-				dwin->_rx_status = DWIN_RX_STATUS_WAITING_DATA;
+				dwin->rx_data_byte_count = 0;
+				dwin->rx_status = DWIN_RX_STATUS_WAITING_DATA;
 				break;
 			case DWIN_RX_STATUS_WAITING_DATA:
-				if (dwin->_rx_data_byte_count < dwin->_rx_data_byte_len) {
-					dwin->_rx_frame_buffer[DWIN_FRAME_DATA_START
-							+ dwin->_rx_data_byte_count] = rx_data;
+				if (dwin->rx_data_byte_count < dwin->rx_data_byte_len) {
+					dwin->rx_frame_buffer[DWIN_FRAME_DATA_START
+							+ dwin->rx_data_byte_count] = rx_data;
 				}
-				if (++(dwin->_rx_data_byte_count) == dwin->_rx_data_byte_len) {
-					dwin->_rx_status = DWIN_RX_STATUS_DATA_RECEIVED;
+				if (++(dwin->rx_data_byte_count) == dwin->rx_data_byte_len) {
+					dwin->rx_status = DWIN_RX_STATUS_DATA_RECEIVED;
 				}
 				break;
 			default:
@@ -152,42 +155,42 @@ uint8_t dwin_process(dwin_t *dwin, uint32_t c_tick) {
 		}
 	}
 
-	switch (dwin->_tx_status) {
+	switch (dwin->tx_status) {
 	case DWIN_TX_STATUS_IDLE:
 	case DWIN_TX_STATUS_TX_BUSY:
 		break;
 	case DWIN_TX_STATUS_TX_CMPLT:
-		dwin->_tx_status = DWIN_TX_STATUS_ACK_WAITING;
+		dwin->tx_status = DWIN_TX_STATUS_ACK_WAITING;
 		break;
 	case DWIN_TX_STATUS_ACK_WAITING:
 		break;
 	case DWIN_TX_STATUS_ACK:
-		dwin->_tx_status = DWIN_TX_STATUS_IDLE;
+		dwin->tx_status = DWIN_TX_STATUS_IDLE;
 		break;
 	default:
 		break;
 	}
 
-	if (dwin->_rx_status == DWIN_RX_STATUS_DATA_RECEIVED) {
-		dwin->_rx_status = DWIN_RX_STATUS_WAITING_HEADER;
+	if (dwin->rx_status == DWIN_RX_STATUS_DATA_RECEIVED) {
+		dwin->rx_status = DWIN_RX_STATUS_WAITING_HEADER;
 
-		if (dwin->_rx_frame_buffer[DWIN_FRAME_FUNC_CODE] == 0x83) {
-			uint16_t address = (dwin->_rx_frame_buffer[DWIN_FRAME_DATA_START]
-					<< 8) | (dwin->_rx_frame_buffer[DWIN_FRAME_DATA_START + 1]);
+		if (dwin->rx_frame_buffer[DWIN_FRAME_FUNC_CODE] == 0x83) {
+			uint16_t address = (dwin->rx_frame_buffer[DWIN_FRAME_DATA_START]
+					<< 8) | (dwin->rx_frame_buffer[DWIN_FRAME_DATA_START + 1]);
 
 			uint8_t data_count =
-					dwin->_rx_frame_buffer[DWIN_FRAME_DATA_START + 2];
+					dwin->rx_frame_buffer[DWIN_FRAME_DATA_START + 2];
 			if (data_count == 1) {
 				uint16_t data =
-						(dwin->_rx_frame_buffer[DWIN_FRAME_DATA_START + 3] << 8)
-								| (dwin->_rx_frame_buffer[DWIN_FRAME_DATA_START
+						(dwin->rx_frame_buffer[DWIN_FRAME_DATA_START + 3] << 8)
+								| (dwin->rx_frame_buffer[DWIN_FRAME_DATA_START
 										+ 4]);
 				for (uint8_t i = 0; i < DWIN_CALLBACK_ADDR_MAX_COUNT; ++i) {
-					if (dwin->_cb_address[i] == -1) {
+					if (dwin->cb_address[i] == -1) {
 						break;
 					} else {
-						if (address == dwin->_cb_address[i]) {
-							(*(dwin->_cb_fn[i]))(data);
+						if (address == dwin->cb_address[i]) {
+							(*(dwin->cb_fn[i]))(data);
 							break;
 						}
 					}
@@ -199,28 +202,28 @@ uint8_t dwin_process(dwin_t *dwin, uint32_t c_tick) {
 				 */
 			}
 		} else {
-			if (dwin->_tx_status == DWIN_TX_STATUS_ACK_WAITING) {
-				if (dwin->_rx_frame_buffer[DWIN_FRAME_FUNC_CODE] == 0x82) {
-					if ((dwin->_rx_frame_buffer[DWIN_FRAME_DATA_START] == 0x4f)
-							&& (dwin->_rx_frame_buffer[DWIN_FRAME_DATA_START + 1]
+			if (dwin->tx_status == DWIN_TX_STATUS_ACK_WAITING) {
+				if (dwin->rx_frame_buffer[DWIN_FRAME_FUNC_CODE] == 0x82) {
+					if ((dwin->rx_frame_buffer[DWIN_FRAME_DATA_START] == 0x4f)
+							&& (dwin->rx_frame_buffer[DWIN_FRAME_DATA_START + 1]
 									== 0x4b)) {
-						dwin->_tx_status = DWIN_TX_STATUS_ACK;
+						dwin->tx_status = DWIN_TX_STATUS_ACK;
 					}
 				}
 			}
 		}
 	}
 
-	if (dwin->_tx_status != DWIN_TX_STATUS_IDLE) {
-		if ((c_tick - dwin->_tx_last_sent_tick) >= dwin->_tx_timeout_ticks) {
-			dwin->_tx_status = DWIN_TX_STATUS_IDLE;
+	if (dwin->tx_status != DWIN_TX_STATUS_IDLE) {
+		if ((c_tick - dwin->tx_last_sent_tick) >= dwin->tx_timeout_ticks) {
+			dwin->tx_status = DWIN_TX_STATUS_IDLE;
 		}
 	}
 
-	if (dwin->_rx_status != DWIN_RX_STATUS_WAITING_HEADER) {
-		if ((c_tick - dwin->_rx_frame_start_tick)
-				>= dwin->_rx_frame_timeout_ticks) {
-			dwin->_rx_status = DWIN_RX_STATUS_WAITING_HEADER;
+	if (dwin->rx_status != DWIN_RX_STATUS_WAITING_HEADER) {
+		if ((c_tick - dwin->rx_frame_start_tick)
+				>= dwin->rx_frame_timeout_ticks) {
+			dwin->rx_status = DWIN_RX_STATUS_WAITING_HEADER;
 		}
 	}
 
@@ -238,32 +241,32 @@ uint8_t dwin_write_vp(dwin_t *dwin, uint16_t vp_start_addr, uint16_t *vp_data,
 		uint16_t vp_data_len, uint32_t ctick) {
 	uint8_t ret_status = 0;
 	uint16_t tx_frame_len = (vp_data_len * 2) + 6;
-	if (dwin->_tx_status != DWIN_TX_STATUS_IDLE) {
+	if (dwin->tx_status != DWIN_TX_STATUS_IDLE) {
 		ret_status = 2;
 	} else {
 		if (tx_frame_len >= DWIN_TX_FRAME_MAX_LEN) {
 			ret_status = 1;
 		} else {
-			dwin->_tx_frame_buffer[DWIN_FRAME_HEADER_HIGH] = 0x5a;
-			dwin->_tx_frame_buffer[DWIN_FRAME_HEADER_LOW] = 0xa5;
-			dwin->_tx_frame_buffer[DWIN_FRAME_LEN] = (2 * vp_data_len) + 3;
-			dwin->_tx_frame_buffer[DWIN_FRAME_FUNC_CODE] = 0x82;
-			dwin->_tx_frame_buffer[DWIN_FRAME_DATA_START] = vp_start_addr >> 8;
-			dwin->_tx_frame_buffer[DWIN_FRAME_DATA_START + 1] = vp_start_addr
+			dwin->tx_frame_buffer[DWIN_FRAME_HEADER_HIGH] = 0x5a;
+			dwin->tx_frame_buffer[DWIN_FRAME_HEADER_LOW] = 0xa5;
+			dwin->tx_frame_buffer[DWIN_FRAME_LEN] = (2 * vp_data_len) + 3;
+			dwin->tx_frame_buffer[DWIN_FRAME_FUNC_CODE] = 0x82;
+			dwin->tx_frame_buffer[DWIN_FRAME_DATA_START] = vp_start_addr >> 8;
+			dwin->tx_frame_buffer[DWIN_FRAME_DATA_START + 1] = vp_start_addr
 					& 0x00ff;
 
 			for (uint8_t i = 0; i < vp_data_len; ++i) {
-				dwin->_tx_frame_buffer[DWIN_FRAME_DATA_START + 2 + (2 * i)] =
+				dwin->tx_frame_buffer[DWIN_FRAME_DATA_START + 2 + (2 * i)] =
 						vp_data[i] >> 8;
-				dwin->_tx_frame_buffer[DWIN_FRAME_DATA_START + 2 + (2 * i) + 1] =
+				dwin->tx_frame_buffer[DWIN_FRAME_DATA_START + 2 + (2 * i) + 1] =
 						vp_data[i] & 0x00ff;
 			}
 		}
 
 		if (dwin_itf_uart_transmit_dma(dwin, tx_frame_len)
 				== DWIN_ERROR_NOERR) {
-			dwin->_tx_last_sent_tick = ctick;
-			dwin->_tx_status = DWIN_TX_STATUS_TX_BUSY;
+			dwin->tx_last_sent_tick = ctick;
+			dwin->tx_status = DWIN_TX_STATUS_TX_BUSY;
 		} else {
 			ret_status = 3;
 		}
@@ -276,9 +279,9 @@ uint8_t dwin_reg_cb(dwin_t *dwin, uint16_t watch_address, dwin_cb_fn_t cb_fn) {
 	uint8_t ret_status = 0;
 	uint8_t index = 0;
 	for (; index < DWIN_CALLBACK_ADDR_MAX_COUNT; ++index) {
-		if (dwin->_cb_address[index] == -1) {
-			dwin->_cb_address[index] = watch_address;
-			dwin->_cb_fn[index] = cb_fn;
+		if (dwin->cb_address[index] == -1) {
+			dwin->cb_address[index] = watch_address;
+			dwin->cb_fn[index] = cb_fn;
 			break;
 		}
 	}
@@ -289,9 +292,5 @@ uint8_t dwin_reg_cb(dwin_t *dwin, uint16_t watch_address, dwin_cb_fn_t cb_fn) {
 }
 
 uint8_t dwin_is_tx_idle(dwin_t *dwin) {
-	return dwin->_tx_status == DWIN_TX_STATUS_IDLE ? 1 : 0;
+	return dwin->tx_status == DWIN_TX_STATUS_IDLE ? 1 : 0;
 }
-
-extern inline void dwin_uart_tx_callback(dwin_t *dwin);
-extern inline void dwin_uart_rx_callback(dwin_t *dwin, uint16_t head);
-extern inline void dwin_uart_error_callback(dwin_t *dwin);
