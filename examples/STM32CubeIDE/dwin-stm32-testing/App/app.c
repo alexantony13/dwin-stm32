@@ -14,9 +14,7 @@ extern UART_HandleTypeDef huart3;
 dwin_t dwin;
 
 void app_init() {
-	dwin.huart = &huart3;
-	dwin.rx_ring_buffer.size = 32;
-	dwin_init(&dwin);
+	dwin_init(&dwin, &huart3, 32);
 }
 
 void app_process() {
