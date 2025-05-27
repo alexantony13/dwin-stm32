@@ -9,6 +9,7 @@
 
 #include "main.h"
 #include "dwin.h"
+#include "defines.h"
 
 typedef struct sys_param_t {
 	uint16_t tick[2];
@@ -22,6 +23,7 @@ dwin_t dwin;
 
 static void display_led_button_pressed_cb(uint16_t data) {
 	sys_param.led_status = data;
+	sys_param.led_status_updated = 1;
 }
 
 void app_init() {
@@ -44,13 +46,13 @@ void app_process() {
 			sys_param.led_status_updated = 0;
 
 			HAL_GPIO_WritePin(LED0_GPIO_Port, LED0_Pin,
-					((sys_param.led_status >> 0) | 0x01));
+					BIT_CHECK(sys_param.led_status, 0));
 			HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin,
-					((sys_param.led_status >> 1) | 0x01));
+					BIT_CHECK(sys_param.led_status, 1));
 			HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin,
-					((sys_param.led_status >> 2) | 0x01));
+					BIT_CHECK(sys_param.led_status, 2));
 			HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin,
-					((sys_param.led_status >> 3) | 0x01));
+					BIT_CHECK(sys_param.led_status, 3));
 		}
 
 		dwin_process(&dwin, ctick);
