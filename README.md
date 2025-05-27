@@ -51,6 +51,12 @@ This repository provides a C library and accompanying resources to facilitate co
    - Connect STM32 GND to display GND
    - Use level shifters if needed. (If stm32 uart pins are not 5v tolerant.)
 
+## ✅ TODO
+
+- [ ] Implement CRC handling.
+- [ ] Add utility functions for display manipulation.
+
+
 ## 📄 License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
