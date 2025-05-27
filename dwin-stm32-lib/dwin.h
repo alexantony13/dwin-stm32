@@ -95,12 +95,12 @@ uint8_t dwin_process(dwin_t *dwin, uint32_t c_tick);
  *
  * @param dwin				dwin_t hanle
  * @param vp_start_addr		VP start address from which data is to be updated
- * @param data				pointer to data
+ * @param vp_data_buff		pointer to data
  * @param data_len			data length
  * @param ctick				current tick value for checking timeout
  * @return
  */
-uint8_t dwin_write_vp(dwin_t *dwin, uint16_t vp_start_addr, uint16_t *data,
+uint8_t dwin_write_vp(dwin_t *dwin, uint16_t vp_start_addr, uint16_t *vp_data_buff,
 		uint16_t data_len, uint32_t ctick);
 
 /**

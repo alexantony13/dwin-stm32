@@ -237,8 +237,8 @@ uint8_t dwin_process(dwin_t *dwin, uint32_t c_tick) {
  *  Response: 5aa5 03 82 4f4b
  *    Length: 6
  */
-uint8_t dwin_write_vp(dwin_t *dwin, uint16_t vp_start_addr, uint16_t *vp_data,
-		uint16_t vp_data_len, uint32_t ctick) {
+uint8_t dwin_write_vp(dwin_t *dwin, uint16_t vp_start_addr,
+		uint16_t *vp_data_buff, uint16_t vp_data_len, uint32_t ctick) {
 	uint8_t ret_status = 0;
 	uint16_t tx_frame_len = (vp_data_len * 2) + 6;
 	if (dwin->tx_status != DWIN_TX_STATUS_IDLE) {
@@ -257,9 +257,9 @@ uint8_t dwin_write_vp(dwin_t *dwin, uint16_t vp_start_addr, uint16_t *vp_data,
 
 			for (uint8_t i = 0; i < vp_data_len; ++i) {
 				dwin->tx_frame_buffer[DWIN_FRAME_DATA_START + 2 + (2 * i)] =
-						vp_data[i] >> 8;
+						vp_data_buff[i] >> 8;
 				dwin->tx_frame_buffer[DWIN_FRAME_DATA_START + 2 + (2 * i) + 1] =
-						vp_data[i] & 0x00ff;
+						vp_data_buff[i] & 0x00ff;
 			}
 		}
 
@@ -294,3 +294,8 @@ uint8_t dwin_reg_cb(dwin_t *dwin, uint16_t watch_address, dwin_cb_fn_t cb_fn) {
 uint8_t dwin_is_tx_idle(dwin_t *dwin) {
 	return dwin->tx_status == DWIN_TX_STATUS_IDLE ? 1 : 0;
 }
+
+extern void dwin_uart_rx_callback(dwin_t *dwin,
+		uint16_t last_byte_pos_in_buffer);
+extern void dwin_uart_tx_callback(dwin_t *dwin);
+extern void dwin_uart_error_callback(dwin_t *dwin);
