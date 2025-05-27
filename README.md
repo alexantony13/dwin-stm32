@@ -9,6 +9,8 @@ This repository provides a C library and accompanying resources to facilitate co
 - **Advanced STM32 UART**: Uses DMA transfer and Idle Line Detection of STM32 uart peripheral.
 - **API for display update callbacks**: Uses callbacks instead of polling display VP addresses.
 - **Example Project**: Ready-to-use STM32CubeIDE project to kickstart development.
+    - MCU: STM32L431VCT6
+    - Display: 7" COB UART Touch Panel (DMG10600T070_09WTC)
 - **UI Tools**: DGUS and GIMP project files for customizing display interfaces.
 
 ## 🛠 Requirements
