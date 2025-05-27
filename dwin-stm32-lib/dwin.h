@@ -50,7 +50,7 @@ typedef struct dwin_ring_buffer_t {
 	int16_t head_index, tail_index;
 } dwin_ring_buffer_t;
 
-typedef void (*dwin_cb_fn_t)(uint16_t);
+typedef void (*dwin_cb_fn_t)(uint8_t *data_ptr, uint16_t data16_count);
 
 typedef struct dwin_t {
 	void *huart;

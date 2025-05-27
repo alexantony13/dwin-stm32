@@ -21,8 +21,10 @@ sys_param_t sys_param;
 extern UART_HandleTypeDef huart3;
 dwin_t dwin;
 
-static void display_led_button_pressed_cb(uint16_t data) {
-	sys_param.led_status = data;
+static void display_led_button_pressed_cb(uint8_t *data_ptr,
+		uint16_t data16_len) {
+	UNUSED(data16_len);
+	sys_param.led_status = (data_ptr[0] << 8) | data_ptr[1];
 	sys_param.led_status_updated = 1;
 }
 

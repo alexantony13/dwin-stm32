@@ -180,27 +180,20 @@ uint8_t dwin_process(dwin_t *dwin, uint32_t c_tick) {
 
 			uint8_t data_count =
 					dwin->rx_frame_buffer[DWIN_FRAME_DATA_START + 2];
-			if (data_count == 1) {
-				uint16_t data =
-						(dwin->rx_frame_buffer[DWIN_FRAME_DATA_START + 3] << 8)
-								| (dwin->rx_frame_buffer[DWIN_FRAME_DATA_START
-										+ 4]);
-				for (uint8_t i = 0; i < DWIN_CALLBACK_ADDR_MAX_COUNT; ++i) {
-					if (dwin->cb_address[i] == -1) {
+
+			for (uint8_t i = 0; i < DWIN_CALLBACK_ADDR_MAX_COUNT; ++i) {
+				if (dwin->cb_address[i] == -1) {
+					break;
+				} else {
+					if (address == dwin->cb_address[i]) {
+						(*(dwin->cb_fn[i]))(
+								&(dwin->rx_frame_buffer[DWIN_FRAME_DATA_START
+										+ 3]), data_count);
 						break;
-					} else {
-						if (address == dwin->cb_address[i]) {
-							(*(dwin->cb_fn[i]))(data);
-							break;
-						}
 					}
 				}
-			} else {
-				/*
-				 * TODO:
-				 * Handling conditions where data_count is more than one
-				 */
 			}
+
 		} else {
 			if (dwin->tx_status == DWIN_TX_STATUS_ACK_WAITING) {
 				if (dwin->rx_frame_buffer[DWIN_FRAME_FUNC_CODE] == 0x82) {
