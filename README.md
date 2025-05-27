@@ -56,6 +56,9 @@ This repository provides a C library and accompanying resources to facilitate co
 
 ## ✅ TODO
 
+- [x] API for writing data to VP addresses of display.
+- [x] Api for registering touch event callbacks.
+- [ ] API for reading data from VP addresses.
 - [ ] Implement CRC handling.
 - [ ] Add utility functions for display manipulation.
 
