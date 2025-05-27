@@ -7,6 +7,7 @@ This repository provides a C library and accompanying resources to facilitate co
 
 - **Modular Design**: Easy integration into existing STM32 projects.
 - **Advanced STM32 UART**: Uses DMA transfer and Idle Line Detection of STM32 uart peripheral.
+- **API for display update callbacks**: Uses callbacks instead of polling display VP addresses. Ensures minimum CPU overhead
 - **Example Project**: Ready-to-use STM32CubeIDE project to kickstart development.
 - **UI Tools**: DGUS and GIMP project files for customizing display interfaces.
 
