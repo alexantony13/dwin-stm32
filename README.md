@@ -1,6 +1,8 @@
 
 # DWIN UART Display Interface Library for STM32
 
+[![Docs](https://img.shields.io/badge/Demo-GitHub%20Pages-blue)](https://alexantony13.github.io/dwin-stm32/)
+
 This repository provides a C library and accompanying resources to facilitate communication between STM32 microcontrollers and DWIN DGUS-II UART displays.
 
 ## ✨ Features
