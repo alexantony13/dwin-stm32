@@ -34,10 +34,14 @@ typedef enum dwin_rx_status_t {
 
 typedef enum dwin_tx_status_t {
 	DWIN_TX_STATUS_IDLE,
-	DWIN_TX_STATUS_TX_BUSY,
-	DWIN_TX_STATUS_TX_CMPLT,
-	DWIN_TX_STATUS_ACK_WAITING,
-	DWIN_TX_STATUS_ACK,
+	DWIN_TX_STATUS_TX_BUSY_WRITE_VP,
+	DWIN_TX_STATUS_TX_BUSY_READ_VP,
+	DWIN_TX_STATUS_VP_WRITE_TX_CMPLT,
+	DWIN_TX_STATUS_VP_READ_TX_CMPLT,
+	DWIN_TX_STATUS_VP_WRITE_ACK_WAITING,
+	DWIN_TX_STATUS_VP_READ_RESPONSE_WAITING,
+	DWIN_TX_STATUS_VP_WRITE_ACK,
+	DWIN_TX_STATUS_VP_READ_RESPONSE,
 } dwin_tx_status_t;
 
 typedef enum dwin_error_t {
@@ -94,14 +98,27 @@ uint8_t dwin_process(dwin_t *dwin, uint32_t c_tick);
  * @brief 					Function to write data to DWIN display VP address
  *
  * @param dwin				dwin_t hanle
- * @param vp_start_addr		VP start address from which data is to be updated
+ * @param vp_start_addr		VP start address to which data is to be written
  * @param vp_data_buff		pointer to data
  * @param data_len			data length
  * @param ctick				current tick value for checking timeout
  * @return
  */
-uint8_t dwin_write_vp(dwin_t *dwin, uint16_t vp_start_addr, uint16_t *vp_data_buff,
-		uint16_t data_len, uint32_t ctick);
+uint8_t dwin_write_vp(dwin_t *dwin, uint16_t vp_start_addr,
+		uint16_t *vp_data_buff, uint16_t data_len, uint32_t ctick);
+
+/**
+ * @brief 					Function to read data from DWIN display VP address
+ *
+ * @param dwin				dwin_t hanle
+ * @param vp_start_addr		VP start address from which data is to be read
+ * @param vp_data_buff		pointer to data
+ * @param data_len			data length
+ * @param ctick				current tick value for checking timeout
+ * @return
+ */
+uint8_t dwin_read_vp(dwin_t *dwin, uint16_t vp_start_addr, uint16_t data_len,
+		uint32_t ctick);
 
 /**
  * @brief 					Function to register user callbacks on VP data update from display.
@@ -111,7 +128,8 @@ uint8_t dwin_write_vp(dwin_t *dwin, uint16_t vp_start_addr, uint16_t *vp_data_bu
  * @param cb_fn				Function pointer to the user callback function
  * @return
  */
-uint8_t dwin_reg_cb(dwin_t *dwin, uint16_t watch_address, dwin_event_cb_fn_t cb_fn);
+uint8_t dwin_reg_cb(dwin_t *dwin, uint16_t watch_address,
+		dwin_event_cb_fn_t cb_fn);
 
 /**
  * @brief 			Function to check if UART is ready for new transmit.
@@ -131,8 +149,7 @@ uint8_t dwin_is_tx_idle(dwin_t *dwin);
  * @attention 						"HAL_UARTEx_RxEventCallback" gives the size.
  * 									"last_byte_pos_in_buffer" should be (size-1)
  */
-inline void dwin_uart_rx_callback(dwin_t *dwin,
-		uint16_t last_byte_pos_in_buffer) {
+inline void dwin_uart_rx_callback(dwin_t *dwin, uint16_t last_byte_pos_in_buffer) {
 	dwin->rx_ring_buffer.head_index = last_byte_pos_in_buffer;
 }
 
@@ -143,9 +160,7 @@ inline void dwin_uart_rx_callback(dwin_t *dwin,
  *
  * @param dwin	dwin_t hanle
  */
-inline void dwin_uart_tx_callback(dwin_t *dwin) {
-	dwin->tx_status = DWIN_TX_STATUS_TX_CMPLT;
-}
+void dwin_uart_tx_callback(dwin_t *dwin);
 
 /**
  * @brief 		DWIN UART error callback
