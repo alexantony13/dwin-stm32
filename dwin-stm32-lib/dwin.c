@@ -23,62 +23,85 @@
  *    Max length: (7 + 2n) bytes
  */
 
+#define DWIN_TX_TIMEOUT_TICKS 1000
+#define DWIN_RX_FRAME_TIMEOUT_TICKS 1000
+
+#define DWIN_COMM_FRAME_HEADER_HIGH 0x5a
+#define DWIN_COMM_FRAME_HEADER_LOW 0xa5
+
+#define DWIN_COMM_FRAME_CMD_WRITE_VARIABLE 0x82
+#define DWIN_COMM_FRAME_CMD_READ_VARIABLE 0x83
+#define DWIN_COMM_FRAME_CMD_WRITE_ACK_HIGH 0x4f
+#define DWIN_COMM_FRAME_CMD_WRITE_ACK_LOW 0x4b
+#define DWIN_VP_READ_TX_FRAME_LEN 7
+#if DWIN_VP_READ_TX_FRAME_LEN >= DWIN_TX_FRAME_MAX_LEN
+#error DWIN_TX_FRAME_MAX_LEN should be greater than DWIN_VP_READ_TX_FRAME_LEN
+#endif
+
+#define DWIN_UINT16_FROM_UINT8(high_byte, low_byte) ((uint16_t)((high_byte<<8)|low_byte))
+#define DWIN_VP_WRITE_TX_FRAME_LEN(data_len) ((data_len*2)+6)
+
 enum dwin_frame_names {
-	DWIN_FRAME_HEADER_HIGH,
-	DWIN_FRAME_HEADER_LOW,
-	DWIN_FRAME_LEN,
-	DWIN_FRAME_FUNC_CODE,
-	DWIN_FRAME_DATA_START,
+	DWIN_FRAME_NAME_HEADER_HIGH,
+	DWIN_FRAME_NAME_HEADER_LOW,
+	DWIN_FRAME_NAME_LEN,
+	DWIN_FRAME_NAME_FUNC_CODE,
+	DWIN_FRAME_NAME_DATA_START,
 };
 
-static uint8_t dwin_ring_buffer_dequeue(dwin_t *dwin, uint8_t *data);
+static dwin_error_t dwin_ring_buffer_dequeue(dwin_t *dwin, uint8_t *data);
 
-uint8_t dwin_init(dwin_t *dwin, void *huart, int16_t ring_buffer_size) {
-	uint8_t ret_status = 0;
+dwin_error_t dwin_init(dwin_t *dwin, void *huart, uint8_t ring_buffer_size) {
+	dwin_error_t ret_status = DWIN_ERROR_NOERR;
+
+	if ((NULL == dwin) || (NULL == huart) || (ring_buffer_size == 0)
+			|| (dwin->rx_ring_buffer.size >= DWIN_RX_CIRC_BUF_MAX_LEN)) {
+		return DWIN_ERROR_PARAM;
+	}
 
 	dwin->huart = huart;
 	dwin->rx_ring_buffer.size = ring_buffer_size;
 
-	dwin->status = DWIN_STATUS_OK;
+	dwin->tx_state = DWIN_TX_STATUS_IDLE;
+	dwin->tx_timeout_ticks = DWIN_TX_TIMEOUT_TICKS;
 
-	dwin->tx_status = DWIN_TX_STATUS_IDLE;
-	dwin->tx_timeout_ticks = 1000;
-
-	dwin->rx_status = DWIN_RX_STATUS_WAITING_HEADER;
+	dwin->rx_state = DWIN_RX_STATUS_WAITING_HEADER;
 	dwin->rx_ring_buffer.head_index = -1;
 	dwin->rx_ring_buffer.tail_index = -1;
-	dwin->rx_frame_timeout_ticks = 1000;
+	dwin->rx_frame_timeout_ticks = DWIN_RX_FRAME_TIMEOUT_TICKS;
 
 	for (uint8_t i = 0; i < DWIN_CALLBACK_ADDR_MAX_COUNT; ++i) {
-		dwin->cb_address[i] = -1;
 		dwin->cb_fn[i] = NULL;
+		dwin->cb_address[i] = 0;
 	}
 
-	if (dwin->rx_ring_buffer.size != 0) {
-		if (dwin->rx_ring_buffer.size < DWIN_RX_CIRC_BUF_MAX_LEN) {
-			dwin->rx_ring_buffer.buf_ptr = (uint8_t*) calloc(
-					dwin->rx_ring_buffer.size, sizeof(uint8_t));
+	dwin->rx_ring_buffer.buf_ptr = (uint8_t*) calloc(dwin->rx_ring_buffer.size,
+			sizeof(uint8_t));
 
-			if (dwin->rx_ring_buffer.buf_ptr != NULL) {
-				if (dwin_itf_uart_receive_to_idle_dma(dwin)
-						!= DWIN_ERROR_NOERR) {
-					ret_status = 4;
-				}
-			} else {
-				ret_status = 3;
-			}
-		} else {
-			ret_status = 2;
-		}
+	if (dwin->rx_ring_buffer.buf_ptr != NULL) {
+		ret_status = dwin_itf_uart_receive_to_idle_dma(dwin);
 	} else {
-		ret_status = 1;
+		ret_status = DWIN_ERROR_MEM_ALLOC;
+	}
+
+	dwin->status = DWIN_STATUS_INIT;
+	if (ret_status == DWIN_ERROR_NOERR) {
+		dwin->status = DWIN_STATUS_OK;
 	}
 
 	return ret_status;
 }
 
-static uint8_t dwin_ring_buffer_dequeue(dwin_t *dwin, uint8_t *data) {
-	uint8_t ret_status = 0;
+static dwin_error_t dwin_ring_buffer_dequeue(dwin_t *dwin, uint8_t *data) {
+	if ((dwin == NULL) || (data == NULL)) {
+		return DWIN_ERROR_PARAM;
+	}
+
+	if (dwin->status == DWIN_STATUS_INIT) {
+		return DWIN_ERROR_ERR;
+	}
+
+	dwin_error_t ret_status = DWIN_ERROR_NOERR;
 
 	if (dwin->rx_ring_buffer.tail_index >= 0) {
 		if (dwin->rx_ring_buffer.tail_index
@@ -88,24 +111,32 @@ static uint8_t dwin_ring_buffer_dequeue(dwin_t *dwin, uint8_t *data) {
 			*data =
 					dwin->rx_ring_buffer.buf_ptr[dwin->rx_ring_buffer.tail_index];
 		} else {
-			ret_status = 2;
+			ret_status = DWIN_ERROR_QUEUE;
 		}
 	} else if (dwin->rx_ring_buffer.head_index >= 0) {
 		*data = dwin->rx_ring_buffer.buf_ptr[++dwin->rx_ring_buffer.tail_index];
 	} else {
-		ret_status = 1;
+		ret_status = DWIN_ERROR_QUEUE;
 	}
 
 	return ret_status;
 }
 
-uint8_t dwin_process(dwin_t *dwin, uint32_t c_tick) {
-	uint8_t ret_status = 0;
+dwin_error_t dwin_process(dwin_t *dwin, uint32_t c_tick) {
+	if (dwin == NULL) {
+		return DWIN_ERROR_PARAM;
+	}
+
+	if (dwin->status == DWIN_STATUS_INIT) {
+		return DWIN_ERROR_ERR;
+	}
+
+	dwin_error_t ret_status = DWIN_ERROR_NOERR;
 	uint8_t rx_data;
 
 	if (dwin->status == DWIN_STATUS_UART_ERROR) {
-		dwin->rx_status = DWIN_RX_STATUS_WAITING_HEADER;
-		dwin->tx_status = DWIN_TX_STATUS_IDLE;
+		dwin->rx_state = DWIN_RX_STATUS_WAITING_HEADER;
+		dwin->tx_state = DWIN_TX_STATUS_IDLE;
 		dwin_itf_uart_abort(dwin);
 		dwin->rx_ring_buffer.head_index = -1;
 		dwin->rx_ring_buffer.tail_index = -1;
@@ -114,39 +145,42 @@ uint8_t dwin_process(dwin_t *dwin, uint32_t c_tick) {
 		}
 	}
 
-	if (dwin->rx_status < DWIN_RX_STATUS_DATA_RECEIVED) {
-		if (dwin_ring_buffer_dequeue(dwin, &rx_data) == 0) {
-			// HAL_UART_Transmit(dwin->ring_buffer.huart, &rx_data, 1, 100);
-			switch (dwin->rx_status) {
+	if (dwin->rx_state < DWIN_RX_STATUS_DATA_RECEIVED) {
+		if (dwin_ring_buffer_dequeue(dwin, &rx_data) == DWIN_ERROR_NOERR) {
+			switch (dwin->rx_state) {
 			case DWIN_RX_STATUS_WAITING_HEADER:
-				if (rx_data == 0x5a) {
-					dwin->rx_frame_buffer[DWIN_FRAME_HEADER_HIGH] = rx_data;
-				} else if (rx_data == 0xa5) {
-					dwin->rx_frame_buffer[DWIN_FRAME_HEADER_LOW] = rx_data;
-					if (dwin->rx_frame_buffer[DWIN_FRAME_HEADER_HIGH] == 0x5a) {
-						dwin->rx_status = DWIN_RX_STATUS_WAITING_FRAME_LEN;
+				if (rx_data == DWIN_COMM_FRAME_HEADER_HIGH) {
+					dwin->rx_frame_buffer[DWIN_FRAME_NAME_HEADER_HIGH] =
+							rx_data;
+				} else if (rx_data == DWIN_COMM_FRAME_HEADER_LOW) {
+					dwin->rx_frame_buffer[DWIN_FRAME_NAME_HEADER_LOW] = rx_data;
+					if (dwin->rx_frame_buffer[DWIN_FRAME_NAME_HEADER_HIGH]
+							== DWIN_COMM_FRAME_HEADER_HIGH) {
+						dwin->rx_state = DWIN_RX_STATUS_WAITING_FRAME_LEN;
 						dwin->rx_frame_start_tick = c_tick;
 					}
 				}
 				break;
 			case DWIN_RX_STATUS_WAITING_FRAME_LEN:
-				dwin->rx_frame_buffer[DWIN_FRAME_LEN] = rx_data;
-				dwin->rx_status = DWIN_RX_STATUS_WAITING_FN_CODE;
+				dwin->rx_frame_buffer[DWIN_FRAME_NAME_LEN] = rx_data;
+				dwin->rx_state = DWIN_RX_STATUS_WAITING_FN_CODE;
 				break;
 			case DWIN_RX_STATUS_WAITING_FN_CODE:
-				dwin->rx_frame_buffer[DWIN_FRAME_FUNC_CODE] = rx_data;
-				dwin->rx_data_byte_len = dwin->rx_frame_buffer[DWIN_FRAME_LEN]
-						- 1;
-				dwin->rx_data_byte_count = 0;
-				dwin->rx_status = DWIN_RX_STATUS_WAITING_DATA;
+				dwin->rx_frame_buffer[DWIN_FRAME_NAME_FUNC_CODE] = rx_data;
+				dwin->rx_data_bytes_len =
+						dwin->rx_frame_buffer[DWIN_FRAME_NAME_LEN] - 1;
+				dwin->rx_num_data_bytes_received = 0;
+				dwin->rx_state = DWIN_RX_STATUS_WAITING_DATA;
 				break;
 			case DWIN_RX_STATUS_WAITING_DATA:
-				if (dwin->rx_data_byte_count < dwin->rx_data_byte_len) {
-					dwin->rx_frame_buffer[DWIN_FRAME_DATA_START
-							+ dwin->rx_data_byte_count] = rx_data;
+				if (dwin->rx_num_data_bytes_received
+						< dwin->rx_data_bytes_len) {
+					dwin->rx_frame_buffer[DWIN_FRAME_NAME_DATA_START
+							+ dwin->rx_num_data_bytes_received] = rx_data;
 				}
-				if (++(dwin->rx_data_byte_count) == dwin->rx_data_byte_len) {
-					dwin->rx_status = DWIN_RX_STATUS_DATA_RECEIVED;
+				if (++(dwin->rx_num_data_bytes_received)
+						== dwin->rx_data_bytes_len) {
+					dwin->rx_state = DWIN_RX_STATUS_DATA_RECEIVED;
 				}
 				break;
 			default:
@@ -155,16 +189,16 @@ uint8_t dwin_process(dwin_t *dwin, uint32_t c_tick) {
 		}
 	}
 
-	switch (dwin->tx_status) {
+	switch (dwin->tx_state) {
 	case DWIN_TX_STATUS_IDLE:
 	case DWIN_TX_STATUS_TX_BUSY_WRITE_VP:
 	case DWIN_TX_STATUS_TX_BUSY_READ_VP:
 		break;
 	case DWIN_TX_STATUS_VP_WRITE_TX_CMPLT:
-		dwin->tx_status = DWIN_TX_STATUS_VP_WRITE_ACK_WAITING;
+		dwin->tx_state = DWIN_TX_STATUS_VP_WRITE_ACK_WAITING;
 		break;
 	case DWIN_TX_STATUS_VP_READ_TX_CMPLT:
-		dwin->tx_status = DWIN_TX_STATUS_VP_READ_RESPONSE_WAITING;
+		dwin->tx_state = DWIN_TX_STATUS_VP_READ_RESPONSE_WAITING;
 		break;
 	case DWIN_TX_STATUS_VP_WRITE_ACK_WAITING:
 		break;
@@ -172,62 +206,63 @@ uint8_t dwin_process(dwin_t *dwin, uint32_t c_tick) {
 		break;
 	case DWIN_TX_STATUS_VP_WRITE_ACK:
 	case DWIN_TX_STATUS_VP_READ_RESPONSE:
-		dwin->tx_status = DWIN_TX_STATUS_IDLE;
+		dwin->tx_state = DWIN_TX_STATUS_IDLE;
 		break;
 	default:
 		break;
 	}
 
-	if (dwin->rx_status == DWIN_RX_STATUS_DATA_RECEIVED) {
-		dwin->rx_status = DWIN_RX_STATUS_WAITING_HEADER;
+	if (dwin->rx_state == DWIN_RX_STATUS_DATA_RECEIVED) {
+		dwin->rx_state = DWIN_RX_STATUS_WAITING_HEADER;
 
-		if (dwin->rx_frame_buffer[DWIN_FRAME_FUNC_CODE] == 0x83) {
+		if (dwin->rx_frame_buffer[DWIN_FRAME_NAME_FUNC_CODE]
+				== DWIN_COMM_FRAME_CMD_READ_VARIABLE) {
 
-			if (dwin->tx_status == DWIN_TX_STATUS_VP_READ_RESPONSE_WAITING) {
-				dwin->tx_status = DWIN_TX_STATUS_VP_READ_RESPONSE;
+			if (dwin->tx_state == DWIN_TX_STATUS_VP_READ_RESPONSE_WAITING) {
+				dwin->tx_state = DWIN_TX_STATUS_VP_READ_RESPONSE;
 			}
 
-			uint16_t address = (dwin->rx_frame_buffer[DWIN_FRAME_DATA_START]
-					<< 8) | (dwin->rx_frame_buffer[DWIN_FRAME_DATA_START + 1]);
+			uint16_t address = DWIN_UINT16_FROM_UINT8(
+					dwin->rx_frame_buffer[DWIN_FRAME_NAME_DATA_START],
+					dwin->rx_frame_buffer[DWIN_FRAME_NAME_DATA_START + 1]);
 
 			uint8_t data_count =
-					dwin->rx_frame_buffer[DWIN_FRAME_DATA_START + 2];
+					dwin->rx_frame_buffer[DWIN_FRAME_NAME_DATA_START + 2];
 
 			for (uint8_t i = 0; i < DWIN_CALLBACK_ADDR_MAX_COUNT; ++i) {
-				if (dwin->cb_address[i] == -1) {
+
+				if (dwin->cb_fn[i] == NULL) {
 					break;
-				} else {
-					if (address == dwin->cb_address[i]) {
-						(*(dwin->cb_fn[i]))(
-								&(dwin->rx_frame_buffer[DWIN_FRAME_DATA_START
-										+ 3]), data_count);
-						break;
-					}
+				} else if (address == dwin->cb_address[i]) {
+					(*(dwin->cb_fn[i]))(
+							&(dwin->rx_frame_buffer[DWIN_FRAME_NAME_DATA_START
+									+ 3]), data_count);
+					break;
 				}
 			}
-		} else {
-			if (dwin->tx_status == DWIN_TX_STATUS_VP_WRITE_ACK_WAITING) {
-				if (dwin->rx_frame_buffer[DWIN_FRAME_FUNC_CODE] == 0x82) {
-					if ((dwin->rx_frame_buffer[DWIN_FRAME_DATA_START] == 0x4f)
-							&& (dwin->rx_frame_buffer[DWIN_FRAME_DATA_START + 1]
-									== 0x4b)) {
-						dwin->tx_status = DWIN_TX_STATUS_VP_WRITE_ACK;
-					}
+		} else if (dwin->tx_state == DWIN_TX_STATUS_VP_WRITE_ACK_WAITING) {
+			if (dwin->rx_frame_buffer[DWIN_FRAME_NAME_FUNC_CODE]
+					== DWIN_COMM_FRAME_CMD_WRITE_VARIABLE) {
+				if ((dwin->rx_frame_buffer[DWIN_FRAME_NAME_DATA_START]
+						== DWIN_COMM_FRAME_CMD_WRITE_ACK_HIGH)
+						&& (dwin->rx_frame_buffer[DWIN_FRAME_NAME_DATA_START + 1]
+								== DWIN_COMM_FRAME_CMD_WRITE_ACK_LOW)) {
+					dwin->tx_state = DWIN_TX_STATUS_VP_WRITE_ACK;
 				}
 			}
 		}
 	}
 
-	if (dwin->tx_status != DWIN_TX_STATUS_IDLE) {
+	if (dwin->tx_state != DWIN_TX_STATUS_IDLE) {
 		if ((c_tick - dwin->tx_last_sent_tick) >= dwin->tx_timeout_ticks) {
-			dwin->tx_status = DWIN_TX_STATUS_IDLE;
+			dwin->tx_state = DWIN_TX_STATUS_IDLE;
 		}
 	}
 
-	if (dwin->rx_status != DWIN_RX_STATUS_WAITING_HEADER) {
+	if (dwin->rx_state != DWIN_RX_STATUS_WAITING_HEADER) {
 		if ((c_tick - dwin->rx_frame_start_tick)
 				>= dwin->rx_frame_timeout_ticks) {
-			dwin->rx_status = DWIN_RX_STATUS_WAITING_HEADER;
+			dwin->rx_state = DWIN_RX_STATUS_WAITING_HEADER;
 		}
 	}
 
@@ -241,39 +276,49 @@ uint8_t dwin_process(dwin_t *dwin, uint32_t c_tick) {
  *  Response: 5aa5 03 82 4f4b
  *    Length: 6
  */
-uint8_t dwin_write_vp(dwin_t *dwin, uint16_t vp_start_addr,
-		uint16_t *vp_data_buff, uint16_t vp_data_len, uint32_t ctick) {
-	uint8_t ret_status = 0;
-	uint16_t tx_frame_len = (vp_data_len * 2) + 6;
-	if (dwin->tx_status != DWIN_TX_STATUS_IDLE) {
-		ret_status = 2;
-	} else {
-		if (tx_frame_len >= DWIN_TX_FRAME_MAX_LEN) {
-			ret_status = 1;
-		} else {
-			dwin->tx_frame_buffer[DWIN_FRAME_HEADER_HIGH] = 0x5a;
-			dwin->tx_frame_buffer[DWIN_FRAME_HEADER_LOW] = 0xa5;
-			dwin->tx_frame_buffer[DWIN_FRAME_LEN] = (2 * vp_data_len) + 3;
-			dwin->tx_frame_buffer[DWIN_FRAME_FUNC_CODE] = 0x82;
-			dwin->tx_frame_buffer[DWIN_FRAME_DATA_START] = vp_start_addr >> 8;
-			dwin->tx_frame_buffer[DWIN_FRAME_DATA_START + 1] = vp_start_addr
-					& 0x00ff;
+dwin_error_t dwin_write_vp(dwin_t *dwin, uint16_t vp_start_addr,
+		uint16_t *vp_data_buff, uint8_t vp_data_len, uint32_t ctick) {
 
-			for (uint8_t i = 0; i < vp_data_len; ++i) {
-				dwin->tx_frame_buffer[DWIN_FRAME_DATA_START + 2 + (2 * i)] =
-						vp_data_buff[i] >> 8;
-				dwin->tx_frame_buffer[DWIN_FRAME_DATA_START + 2 + (2 * i) + 1] =
-						vp_data_buff[i] & 0x00ff;
-			}
-		}
+	if ((dwin == NULL) || (vp_data_buff == NULL) || (vp_data_len == 0)) {
+		return DWIN_ERROR_PARAM;
+	}
 
-		if (dwin_itf_uart_transmit_dma(dwin, tx_frame_len)
-				== DWIN_ERROR_NOERR) {
-			dwin->tx_last_sent_tick = ctick;
-			dwin->tx_status = DWIN_TX_STATUS_TX_BUSY_WRITE_VP;
-		} else {
-			ret_status = 3;
-		}
+	if (dwin->status == DWIN_STATUS_INIT) {
+		return DWIN_ERROR_ERR;
+	}
+	if (dwin->tx_state != DWIN_TX_STATUS_IDLE) {
+		return DWIN_ERROR_BUSY;
+	}
+
+	dwin_error_t ret_status = DWIN_ERROR_NOERR;
+	uint16_t tx_frame_len = DWIN_VP_WRITE_TX_FRAME_LEN(vp_data_len);
+
+	if (tx_frame_len >= DWIN_TX_FRAME_MAX_LEN) {
+		return DWIN_ERROR_ERR;
+	}
+
+	dwin->tx_frame_buffer[DWIN_FRAME_NAME_HEADER_HIGH] =
+	DWIN_COMM_FRAME_HEADER_HIGH;
+	dwin->tx_frame_buffer[DWIN_FRAME_NAME_HEADER_LOW] =
+	DWIN_COMM_FRAME_HEADER_LOW;
+	dwin->tx_frame_buffer[DWIN_FRAME_NAME_LEN] = tx_frame_len - 3;
+	dwin->tx_frame_buffer[DWIN_FRAME_NAME_FUNC_CODE] =
+	DWIN_COMM_FRAME_CMD_WRITE_VARIABLE;
+	dwin->tx_frame_buffer[DWIN_FRAME_NAME_DATA_START] = vp_start_addr >> 8;
+	dwin->tx_frame_buffer[DWIN_FRAME_NAME_DATA_START + 1] = vp_start_addr
+			& 0x00ff;
+
+	for (uint8_t i = 0; i < vp_data_len; ++i) {
+		dwin->tx_frame_buffer[DWIN_FRAME_NAME_DATA_START + 2 + (2 * i)] =
+				vp_data_buff[i] >> 8;
+		dwin->tx_frame_buffer[DWIN_FRAME_NAME_DATA_START + 2 + (2 * i) + 1] =
+				vp_data_buff[i] & 0x00ff;
+	}
+
+	ret_status = dwin_itf_uart_transmit_dma(dwin, tx_frame_len);
+	if (ret_status == DWIN_ERROR_NOERR) {
+		dwin->tx_last_sent_tick = ctick;
+		dwin->tx_state = DWIN_TX_STATUS_TX_BUSY_WRITE_VP;
 	}
 
 	return ret_status;
@@ -286,40 +331,55 @@ uint8_t dwin_write_vp(dwin_t *dwin, uint16_t vp_start_addr,
  *  Response: 5A A5 06 83 1000 01 0002
  *    Max length: (7 + 2n) bytes
  */
-uint8_t dwin_read_vp(dwin_t *dwin, uint16_t vp_start_addr, uint16_t vp_data_len,
-		uint32_t ctick) {
-	uint8_t ret_status = 0;
-	uint16_t tx_frame_len = 7;
-	if (dwin->tx_status != DWIN_TX_STATUS_IDLE) {
-		ret_status = 2;
-	} else {
-		if (tx_frame_len >= DWIN_TX_FRAME_MAX_LEN) {
-			ret_status = 1;
-		} else {
-			dwin->tx_frame_buffer[DWIN_FRAME_HEADER_HIGH] = 0x5a;
-			dwin->tx_frame_buffer[DWIN_FRAME_HEADER_LOW] = 0xa5;
-			dwin->tx_frame_buffer[DWIN_FRAME_LEN] = 0x04;
-			dwin->tx_frame_buffer[DWIN_FRAME_FUNC_CODE] = 0x83;
-			dwin->tx_frame_buffer[DWIN_FRAME_DATA_START] = vp_start_addr >> 8;
-			dwin->tx_frame_buffer[DWIN_FRAME_DATA_START + 1] = vp_start_addr
-					& 0x00ff;
-			dwin->tx_frame_buffer[DWIN_FRAME_DATA_START + 2] = vp_data_len;
-		}
+dwin_error_t dwin_read_vp(dwin_t *dwin, uint16_t vp_start_addr,
+		uint16_t vp_data_len, uint32_t ctick) {
 
-		if (dwin_itf_uart_transmit_dma(dwin, tx_frame_len)
-				== DWIN_ERROR_NOERR) {
-			dwin->tx_last_sent_tick = ctick;
-			dwin->tx_status = DWIN_TX_STATUS_TX_BUSY_READ_VP;
-		} else {
-			ret_status = 3;
-		}
+	if ((dwin == NULL) || (vp_data_len == 0)) {
+		return DWIN_ERROR_PARAM;
 	}
+
+	if (dwin->status == DWIN_STATUS_INIT) {
+		return DWIN_ERROR_ERR;
+	}
+	if (dwin->tx_state != DWIN_TX_STATUS_IDLE) {
+		return DWIN_ERROR_BUSY;
+	}
+
+	dwin_error_t ret_status = DWIN_ERROR_NOERR;
+
+	dwin->tx_frame_buffer[DWIN_FRAME_NAME_HEADER_HIGH] =
+	DWIN_COMM_FRAME_HEADER_HIGH;
+	dwin->tx_frame_buffer[DWIN_FRAME_NAME_HEADER_LOW] =
+	DWIN_COMM_FRAME_HEADER_LOW;
+	dwin->tx_frame_buffer[DWIN_FRAME_NAME_LEN] = DWIN_VP_READ_TX_FRAME_LEN - 3;
+	dwin->tx_frame_buffer[DWIN_FRAME_NAME_FUNC_CODE] =
+	DWIN_COMM_FRAME_CMD_READ_VARIABLE;
+	dwin->tx_frame_buffer[DWIN_FRAME_NAME_DATA_START] = vp_start_addr >> 8;
+	dwin->tx_frame_buffer[DWIN_FRAME_NAME_DATA_START + 1] = vp_start_addr
+			& 0x00ff;
+	dwin->tx_frame_buffer[DWIN_FRAME_NAME_DATA_START + 2] = vp_data_len;
+
+	ret_status = dwin_itf_uart_transmit_dma(dwin, DWIN_VP_READ_TX_FRAME_LEN);
+	if (ret_status == DWIN_ERROR_NOERR) {
+		dwin->tx_last_sent_tick = ctick;
+		dwin->tx_state = DWIN_TX_STATUS_TX_BUSY_READ_VP;
+	}
+
 	return ret_status;
 }
 
-uint8_t dwin_reg_cb(dwin_t *dwin, uint16_t watch_address,
+dwin_error_t dwin_reg_cb(dwin_t *dwin, uint16_t watch_address,
 		dwin_event_cb_fn_t cb_fn) {
-	uint8_t ret_status = 0;
+
+	if ((dwin == NULL) || (cb_fn == NULL)) {
+		return DWIN_ERROR_PARAM;
+	}
+
+	if (dwin->status == DWIN_STATUS_INIT) {
+		return DWIN_ERROR_ERR;
+	}
+
+	dwin_error_t ret_status = DWIN_ERROR_NOERR;
 	uint8_t index = 0;
 	for (; index < DWIN_CALLBACK_ADDR_MAX_COUNT; ++index) {
 		if (dwin->cb_address[index] == -1) {
@@ -329,22 +389,22 @@ uint8_t dwin_reg_cb(dwin_t *dwin, uint16_t watch_address,
 		}
 	}
 	if (index == DWIN_CALLBACK_ADDR_MAX_COUNT) {
-		ret_status = 1;
+		ret_status = DWIN_ERROR_ERR;
 	}
 	return ret_status;
 }
 
 uint8_t dwin_is_tx_idle(dwin_t *dwin) {
-	return dwin->tx_status == DWIN_TX_STATUS_IDLE ? 1 : 0;
+	return dwin->tx_state == DWIN_TX_STATUS_IDLE ? 1 : 0;
 }
 
 extern void dwin_uart_error_callback(dwin_t *dwin);
 
 void dwin_uart_tx_callback(dwin_t *dwin) {
-	if (dwin->tx_status == DWIN_TX_STATUS_TX_BUSY_WRITE_VP) {
-		dwin->tx_status = DWIN_TX_STATUS_VP_WRITE_TX_CMPLT;
-	} else if (dwin->tx_status == DWIN_TX_STATUS_TX_BUSY_READ_VP) {
-		dwin->tx_status = DWIN_TX_STATUS_VP_READ_TX_CMPLT;
+	if (dwin->tx_state == DWIN_TX_STATUS_TX_BUSY_WRITE_VP) {
+		dwin->tx_state = DWIN_TX_STATUS_VP_WRITE_TX_CMPLT;
+	} else if (dwin->tx_state == DWIN_TX_STATUS_TX_BUSY_READ_VP) {
+		dwin->tx_state = DWIN_TX_STATUS_VP_READ_TX_CMPLT;
 	}
 }
 

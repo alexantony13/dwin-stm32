@@ -29,13 +29,13 @@ extern UART_HandleTypeDef huart3;
 dwin_t dwin;
 
 static void display_led_button_pressed_cb(uint8_t *data_ptr,
-		uint16_t data16_len) {
+		uint8_t data16_len) {
 	UNUSED(data16_len);
 	sys_param.led_status = (data_ptr[0] << 8) | data_ptr[1];
 	sys_param.led_status_updated = 1;
 }
 
-static void display_touch_update_callback(uint8_t *data_ptr, uint16_t data16_len) {
+static void display_touch_update_callback(uint8_t *data_ptr, uint8_t data16_len) {
 	if (data16_len == 0x03) {
 		sys_param.tp_status.updated = data_ptr[0];
 		sys_param.tp_status.status= data_ptr[1];

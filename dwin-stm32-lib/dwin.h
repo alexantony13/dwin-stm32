@@ -21,18 +21,18 @@ extern "C"
 #define DWIN_CALLBACK_ADDR_MAX_COUNT 8
 
 typedef enum dwin_status_t {
-	DWIN_STATUS_OK, DWIN_STATUS_UART_ERROR,
+	DWIN_STATUS_INIT, DWIN_STATUS_OK, DWIN_STATUS_UART_ERROR,
 } dwin_status_t;
 
-typedef enum dwin_rx_status_t {
+typedef enum dwin_rx_state_t {
 	DWIN_RX_STATUS_WAITING_HEADER,
 	DWIN_RX_STATUS_WAITING_FRAME_LEN,
 	DWIN_RX_STATUS_WAITING_FN_CODE,
 	DWIN_RX_STATUS_WAITING_DATA,
 	DWIN_RX_STATUS_DATA_RECEIVED,
-} dwin_rx_status_t;
+} dwin_rx_state_t;
 
-typedef enum dwin_tx_status_t {
+typedef enum dwin_tx_state_t {
 	DWIN_TX_STATUS_IDLE,
 	DWIN_TX_STATUS_TX_BUSY_WRITE_VP,
 	DWIN_TX_STATUS_TX_BUSY_READ_VP,
@@ -42,19 +42,25 @@ typedef enum dwin_tx_status_t {
 	DWIN_TX_STATUS_VP_READ_RESPONSE_WAITING,
 	DWIN_TX_STATUS_VP_WRITE_ACK,
 	DWIN_TX_STATUS_VP_READ_RESPONSE,
-} dwin_tx_status_t;
+} dwin_tx_state_t;
 
 typedef enum dwin_error_t {
-	DWIN_ERROR_NOERR, DWIN_ERROR_ERR, DWIN_ERROR_BUSY, DWIN_ERROR_TIMEOUT
+	DWIN_ERROR_NOERR,
+	DWIN_ERROR_ERR,
+	DWIN_ERROR_BUSY,
+	DWIN_ERROR_TIMEOUT,
+	DWIN_ERROR_MEM_ALLOC,
+	DWIN_ERROR_PARAM,
+	DWIN_ERROR_QUEUE,
 } dwin_error_t;
 
 typedef struct dwin_ring_buffer_t {
 	uint8_t *buf_ptr;
-	int16_t size;
-	int16_t head_index, tail_index;
+	uint8_t size;
+	int8_t head_index, tail_index;
 } dwin_ring_buffer_t;
 
-typedef void (*dwin_event_cb_fn_t)(uint8_t *data_ptr, uint16_t data16_count);
+typedef void (*dwin_event_cb_fn_t)(uint8_t *data8_ptr, uint8_t data16_count);
 
 typedef struct dwin_t {
 	void *huart;
@@ -62,16 +68,16 @@ typedef struct dwin_t {
 
 	dwin_status_t status;
 
-	dwin_rx_status_t rx_status;
+	dwin_rx_state_t rx_state;
 	uint8_t rx_frame_buffer[DWIN_RX_FRAME_MAX_LEN];
-	uint16_t rx_data_byte_count, rx_data_byte_len;
+	uint16_t rx_num_data_bytes_received, rx_data_bytes_len;
 	uint32_t rx_frame_start_tick, rx_frame_timeout_ticks;
 
-	dwin_tx_status_t tx_status;
+	dwin_tx_state_t tx_state;
 	uint8_t tx_frame_buffer[DWIN_TX_FRAME_MAX_LEN];
 	uint32_t tx_last_sent_tick, tx_timeout_ticks;
 
-	int16_t cb_address[DWIN_CALLBACK_ADDR_MAX_COUNT];
+	uint16_t cb_address[DWIN_CALLBACK_ADDR_MAX_COUNT];
 	dwin_event_cb_fn_t cb_fn[DWIN_CALLBACK_ADDR_MAX_COUNT];
 } dwin_t;
 
@@ -82,7 +88,7 @@ typedef struct dwin_t {
  * @param dwin	dwin_t hanle
  * @return
  */
-uint8_t dwin_init(dwin_t *dwin, void *huart, int16_t ring_buffer_size);
+dwin_error_t dwin_init(dwin_t *dwin, void *huart, uint8_t ring_buffer_size);
 
 /**
  * @brief			DWIN lib process function.
@@ -92,7 +98,7 @@ uint8_t dwin_init(dwin_t *dwin, void *huart, int16_t ring_buffer_size);
  * @param c_tick	current tick value
  * @return
  */
-uint8_t dwin_process(dwin_t *dwin, uint32_t c_tick);
+dwin_error_t dwin_process(dwin_t *dwin, uint32_t c_tick);
 
 /**
  * @brief 					Function to write data to DWIN display VP address
@@ -104,8 +110,8 @@ uint8_t dwin_process(dwin_t *dwin, uint32_t c_tick);
  * @param ctick				current tick value for checking timeout
  * @return
  */
-uint8_t dwin_write_vp(dwin_t *dwin, uint16_t vp_start_addr,
-		uint16_t *vp_data_buff, uint16_t data_len, uint32_t ctick);
+dwin_error_t dwin_write_vp(dwin_t *dwin, uint16_t vp_start_addr,
+		uint16_t *vp_data_buff, uint8_t data_len, uint32_t ctick);
 
 /**
  * @brief 					Function to read data from DWIN display VP address
@@ -117,8 +123,8 @@ uint8_t dwin_write_vp(dwin_t *dwin, uint16_t vp_start_addr,
  * @param ctick				current tick value for checking timeout
  * @return
  */
-uint8_t dwin_read_vp(dwin_t *dwin, uint16_t vp_start_addr, uint16_t data_len,
-		uint32_t ctick);
+dwin_error_t dwin_read_vp(dwin_t *dwin, uint16_t vp_start_addr,
+		uint16_t data_len, uint32_t ctick);
 
 /**
  * @brief 					Function to register user callbacks on VP data update from display.
@@ -128,7 +134,7 @@ uint8_t dwin_read_vp(dwin_t *dwin, uint16_t vp_start_addr, uint16_t data_len,
  * @param cb_fn				Function pointer to the user callback function
  * @return
  */
-uint8_t dwin_reg_cb(dwin_t *dwin, uint16_t watch_address,
+dwin_error_t dwin_reg_cb(dwin_t *dwin, uint16_t watch_address,
 		dwin_event_cb_fn_t cb_fn);
 
 /**
@@ -149,7 +155,8 @@ uint8_t dwin_is_tx_idle(dwin_t *dwin);
  * @attention 						"HAL_UARTEx_RxEventCallback" gives the size.
  * 									"last_byte_pos_in_buffer" should be (size-1)
  */
-inline void dwin_uart_rx_callback(dwin_t *dwin, uint16_t last_byte_pos_in_buffer) {
+inline void dwin_uart_rx_callback(dwin_t *dwin,
+		uint16_t last_byte_pos_in_buffer) {
 	dwin->rx_ring_buffer.head_index = last_byte_pos_in_buffer;
 }
 
