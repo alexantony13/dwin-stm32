@@ -50,7 +50,7 @@ typedef struct dwin_ring_buffer_t {
 	int16_t head_index, tail_index;
 } dwin_ring_buffer_t;
 
-typedef void (*dwin_cb_fn_t)(uint8_t *data_ptr, uint16_t data16_count);
+typedef void (*dwin_event_cb_fn_t)(uint8_t *data_ptr, uint16_t data16_count);
 
 typedef struct dwin_t {
 	void *huart;
@@ -68,7 +68,7 @@ typedef struct dwin_t {
 	uint32_t tx_last_sent_tick, tx_timeout_ticks;
 
 	int16_t cb_address[DWIN_CALLBACK_ADDR_MAX_COUNT];
-	dwin_cb_fn_t cb_fn[DWIN_CALLBACK_ADDR_MAX_COUNT];
+	dwin_event_cb_fn_t cb_fn[DWIN_CALLBACK_ADDR_MAX_COUNT];
 } dwin_t;
 
 /**
@@ -111,7 +111,7 @@ uint8_t dwin_write_vp(dwin_t *dwin, uint16_t vp_start_addr, uint16_t *vp_data_bu
  * @param cb_fn				Function pointer to the user callback function
  * @return
  */
-uint8_t dwin_reg_cb(dwin_t *dwin, uint16_t watch_address, dwin_cb_fn_t cb_fn);
+uint8_t dwin_reg_cb(dwin_t *dwin, uint16_t watch_address, dwin_event_cb_fn_t cb_fn);
 
 /**
  * @brief 			Function to check if UART is ready for new transmit.

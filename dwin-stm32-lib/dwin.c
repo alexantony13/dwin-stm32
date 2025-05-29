@@ -268,7 +268,7 @@ uint8_t dwin_write_vp(dwin_t *dwin, uint16_t vp_start_addr,
 	return ret_status;
 }
 
-uint8_t dwin_reg_cb(dwin_t *dwin, uint16_t watch_address, dwin_cb_fn_t cb_fn) {
+uint8_t dwin_reg_cb(dwin_t *dwin, uint16_t watch_address, dwin_event_cb_fn_t cb_fn) {
 	uint8_t ret_status = 0;
 	uint8_t index = 0;
 	for (; index < DWIN_CALLBACK_ADDR_MAX_COUNT; ++index) {
