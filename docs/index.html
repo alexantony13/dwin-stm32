@@ -1,54 +1,135 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>DWIN-STM32 Library</title>
   <style>
+    :root {
+      --bg-light: #f4f4f4;
+      --text-light: #000;
+      --bg-dark: #181818;
+      --text-dark: #f0f0f0;
+      --primary: #2ea44f;
+      --primary-hover: #22863a;
+      --card-bg-light: #fff;
+      --card-bg-dark: #242424;
+    }
+
+    [data-theme="light"] {
+      --bg: var(--bg-light);
+      --text: var(--text-light);
+      --card-bg: var(--card-bg-light);
+    }
+
+    [data-theme="dark"] {
+      --bg: var(--bg-dark);
+      --text: var(--text-dark);
+      --card-bg: var(--card-bg-dark);
+    }
+
+    * {
+      box-sizing: border-box;
+      transition: background 0.3s ease, color 0.3s ease;
+    }
+
     body {
-      font-family: Arial, sans-serif;
-      background: #f4f4f4;
+      font-family: 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
       margin: 0;
       padding: 0;
+      line-height: 1.6;
     }
+
     header {
       background: #24292e;
       color: white;
-      padding: 1.5rem;
+      padding: 2rem 1rem;
       text-align: center;
+      animation: fadeInDown 1s ease-out;
     }
+
     section {
       max-width: 800px;
       margin: 2rem auto;
-      background: white;
+      background: var(--card-bg);
       padding: 2rem;
-      border-radius: 10px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+      animation: fadeInUp 1.2s ease-out;
     }
-    h1 {
+
+    h1, h2 {
       margin-top: 0;
     }
+
+    pre {
+      background: #333;
+      color: #fff;
+      padding: 1rem;
+      overflow-x: auto;
+      border-radius: 6px;
+    }
+
     a.button {
       display: inline-block;
       margin-top: 1rem;
       padding: 0.75rem 1.5rem;
-      background: #2ea44f;
+      background: var(--primary);
       color: white;
       text-decoration: none;
-      border-radius: 5px;
+      border-radius: 6px;
+      font-weight: bold;
+      transition: background 0.3s ease, transform 0.2s;
     }
+
     a.button:hover {
-      background: #22863a;
+      background: var(--primary-hover);
+      transform: translateY(-2px);
     }
+
     footer {
       text-align: center;
       padding: 1rem;
       font-size: 0.9rem;
-      color: #666;
+      color: #888;
+    }
+
+    .toggle {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      background: none;
+      border: 2px solid var(--text);
+      border-radius: 50px;
+      padding: 0.4rem 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      background: var(--bg);
+      color: var(--text);
+      transition: all 0.3s ease;
+    }
+
+    .toggle:hover {
+      background: var(--text);
+      color: var(--bg);
+    }
+
+    @keyframes fadeInDown {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
     }
   </style>
 </head>
 <body>
+
+<button class="toggle" onclick="toggleTheme()">🌓 Toggle Theme</button>
 
 <header>
   <h1>DWIN-STM32 Library</h1>
@@ -67,19 +148,35 @@
   <pre><code>git clone https://github.com/alexantony13/dwin-stm32.git</code></pre>
   <p>Include the source files in your STM32 project and configure UART.</p>
 
-  <a class="button" href="https://github.com/alexantony13/dwin-stm32">View on GitHub</a>
+  <a class="button" href="https://github.com/alexantony13/dwin-stm32" target="_blank">View on GitHub</a>
 
   <h2>📘 Documentation</h2>
   <p>Check out the <code>examples/</code> folder for usage samples.</p>
 
   <h2>💡 About</h2>
   <p>DWIN displays are intelligent screens with GUI configuration and UART communication, widely used in embedded systems.</p>
-
 </section>
 
 <footer>
   &copy; 2025 <a href="https://github.com/alexantony13">alexantony13</a> — Built with 💻 and ⚡
 </footer>
+
+<script>
+  const toggleTheme = () => {
+    const current = document.documentElement.getAttribute('data-theme');
+    document.documentElement.setAttribute('data-theme', current === 'light' ? 'dark' : 'light');
+    localStorage.setItem('theme', current === 'light' ? 'dark' : 'light');
+  };
+
+  window.onload = () => {
+    const saved = localStorage.getItem('theme');
+    if (saved) {
+      document.documentElement.setAttribute('data-theme', saved);
+    } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  };
+</script>
 
 </body>
 </html>
