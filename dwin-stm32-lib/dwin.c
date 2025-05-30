@@ -230,7 +230,6 @@ dwin_error_t dwin_process(dwin_t *dwin, uint32_t c_tick) {
 					dwin->rx_frame_buffer[DWIN_FRAME_NAME_DATA_START + 2];
 
 			for (uint8_t i = 0; i < DWIN_CALLBACK_ADDR_MAX_COUNT; ++i) {
-
 				if (dwin->cb_fn[i] == NULL) {
 					break;
 				} else if (address == dwin->cb_address[i]) {
@@ -382,7 +381,7 @@ dwin_error_t dwin_reg_cb(dwin_t *dwin, uint16_t watch_address,
 	dwin_error_t ret_status = DWIN_ERROR_NOERR;
 	uint8_t index = 0;
 	for (; index < DWIN_CALLBACK_ADDR_MAX_COUNT; ++index) {
-		if (dwin->cb_address[index] == -1) {
+		if (dwin->cb_fn[index] == NULL) {
 			dwin->cb_address[index] = watch_address;
 			dwin->cb_fn[index] = cb_fn;
 			break;
