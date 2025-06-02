@@ -1,7 +1,19 @@
 
 # DWIN UART Display Interface Library for STM32
 
-[![Docs](https://img.shields.io/badge/Demo-GitHub%20Pages-blue)](https://alexantony13.github.io/dwin-stm32/)
+# DWIN STM32 DGUS Project
+
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://alexantony13.github.io/dwin-stm32/)
+![Platform](https://img.shields.io/badge/platform-STM32-blue)
+![DWIN DGUS](https://img.shields.io/badge/HMI-DWIN%20DGUS-green)
+
+![Repo Size](https://img.shields.io/github/repo-size/alexantony13/dwin-stm32)
+![Code Size](https://img.shields.io/github/languages/code-size/alexantony13/dwin-stm32)
+![License](https://img.shields.io/github/license/alexantony13/dwin-stm32)
+
+![Last Commit](https://img.shields.io/github/last-commit/alexantony13/dwin-stm32)
+![Issues](https://img.shields.io/github/issues/alexantony13/dwin-stm32)
+![Pull Requests](https://img.shields.io/github/issues-pr/alexantony13/dwin-stm32)
 
 This repository provides a C library and accompanying resources to facilitate communication between STM32 microcontrollers and DWIN DGUS-II UART displays.
 
